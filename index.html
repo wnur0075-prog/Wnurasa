@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0F14">
+<title>ScalpX</title>
+<style>
+:root{--bg:#0B0F14;--s1:#131A22;--s2:#1A232D;--bd:#243040;--tx:#E8EEF4;--mu:#9AA8B8;--up:#35E0A1;--dn:#FF8F70;--wa:#FFB84D}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+button,input{font-family:inherit;color:inherit}
+button{cursor:pointer}
+#app{height:100%;display:flex;flex-direction:column;max-width:520px;margin:0 auto}
+main{flex:1;overflow-y:auto;padding:calc(env(safe-area-inset-top) + 20px) 20px 16px}
+h1{margin:0;font-size:22px;line-height:26px}
+.sub{font-size:12px;color:var(--mu)}
+.card{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:14px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.col{display:flex;flex-direction:column;gap:8px}
+.up{color:var(--up)}.dn{color:var(--dn)}.wa{color:var(--wa)}
+.big{font-size:34px;font-weight:700;line-height:40px}
+.btn{min-height:46px;padding:0 20px;border-radius:12px;border:0;font-size:14px;font-weight:700}
+.pill{min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--bd);background:var(--s1);font-size:13px;font-weight:600;white-space:nowrap}
+.pill.on{background:var(--up);border-color:var(--up);color:#0B0F14}
+.scroll{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.tag{font-size:11px;padding:2px 8px;border-radius:6px;margin-left:6px;font-weight:600}
+.tag.l{background:#1E3B33;color:var(--up)}.tag.s{background:#43261E;color:var(--dn)}
+.chip{font-size:11px;padding:5px 10px;border-radius:999px;background:var(--s2);border:1px solid var(--bd)}
+.inp{width:100%;min-height:46px;border-radius:12px;border:1px solid var(--bd);background:var(--s2);padding:0 12px;font-size:14px}
+input[type=range]{width:100%;accent-color:var(--up);height:28px;margin:0}
+nav{display:grid;grid-template-columns:repeat(5,1fr);background:#0F151C;border-top:1px solid var(--bd);padding-bottom:env(safe-area-inset-bottom)}
+nav button{background:none;border:0;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11px;color:var(--mu);font-weight:500}
+nav button.on{color:var(--up);font-weight:600}
+.strat{width:100%;text-align:left;min-height:64px;background:var(--s1);border:1.5px solid var(--bd);border-radius:14px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.strat.on{background:#16302A;border-color:var(--up)}
+.note{font-size:12px;line-height:17px;color:var(--mu);border:1px dashed var(--bd);border-radius:12px;padding:10px 12px}
+</style>
+</head>
+<body>
+<div id="app"><main id="view"></main><nav id="nav"></nav></div>
+<script>
+var API='https://indodax.com';
+var PAIRS=[['btc_idr','BTC/IDR'],['eth_idr','ETH/IDR'],['sol_idr','SOL/IDR'],['doge_idr','DOGE/IDR'],['usdt_idr','USDT/IDR']];
+var BUCKET={'5s':5,'15s':15,'1m':60,'5m':300};
+var S={tab:'dash',pair:'btc_idr',tf:'1m',strat:'momentum',tp:15,sl:10,filter:'all',dl:2,sz:5,mp:3};
+var M={tick:null,depth:null,ticks:[],last:0,prev:0,ok:false,err:'',bal:null,balAt:null};
+var $=function(q){return document.querySelector(q)};
+var ls=function(k,v){try{if(v===undefined)return localStorage.getItem(k)||'';if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return ''}};
+var idr=function(n){n=Number(n);return n.toLocaleString('id-ID',{maximumFractionDigits:n<1000?2:0})};
+var money=function(n){return (n>=0?'+$':'−$')+Math.abs(n).toFixed(2).replace('.',',')};
+var pct=function(n){return (n/100).toFixed(2).replace('.',',')+'%'};
+var pairName=function(){return PAIRS.filter(function(p){return p[0]===S.pair})[0][1]};
+var ic=function(d){return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>'};
+var TABS=[
+['dash','Dashboard',ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>')],
+['live','Live',ic('<polyline points="3 12 7 12 10 4 14 20 17 12 21 12"/>')],
+['strat','Strategi',ic('<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/>')],
+['hist','Riwayat',ic('<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>')],
+['risk','Akun',ic('<path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6l8-3z"/>')]];
+var STRATS=[['momentum','Momentum Burst','Ikuti lonjakan volume + breakout EMA','1m'],['meanrev','Mean Reversion Rapat','Balik ke rata-rata saat RSI ekstrem','15s'],['orderflow','Order Flow Imbalance','Baca ketimpangan bid/ask di order book','5s'],['microgrid','Grid Mikro','Order bertingkat di pasar sideways','1m']];
+var TRADES=[['BTC/IDR','LONG','1.602.400.000','1.603.150.000','41s',4.5],['ETH/IDR','SHORT','56.210.000','56.150.000','29s',3.2],['BTC/IDR','LONG','1.602.900.000','1.602.400.000','52s',-3.0],['SOL/IDR','LONG','3.012.000','3.017.000','35s',3.1]];
+
+/* ---------- Data pasar Indodax (publik, tanpa API key) ---------- */
+function jget(path){return fetch(API+path).then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.json()})}
+function seed(){
+var pair=S.pair;
+jget('/api/trades/'+pair).then(function(a){
+if(pair!==S.pair||!Array.isArray(a))return;
+var t=a.map(function(x){return [Number(x.date)*1000,Number(x.price)]}).filter(function(x){return x[0]&&x[1]});
+t.sort(function(p,q){return p[0]-q[0]});
+if(t.length){M.ticks=t.concat(M.ticks.filter(function(x){return x[0]>t[t.length-1][0]}))}
+refresh()}).catch(function(){})}
+function poll(){
+var pair=S.pair;
+Promise.all([jget('/api/ticker/'+pair),jget('/api/depth/'+pair)]).then(function(r){
+if(pair!==S.pair)return;
+var t=r[0].ticker,px=Number(t.last);
+if(!px)throw new Error('Harga kosong');
+M.prev=M.last||px;M.last=px;M.tick=t;M.depth=r[1];M.ok=true;M.err='';
+M.ticks.push([Date.now(),px]);if(M.ticks.length>4000)M.ticks.shift();
+refresh()}).catch(function(e){M.ok=false;M.err=String(e&&e.message||e);refresh()})}
+function setPair(p){S.pair=p;M.tick=null;M.depth=null;M.ticks=[];M.last=0;M.prev=0;M.ok=false;M.err='';render();seed();poll()}
+
+/* ---------- API privat Indodax (HMAC-SHA512) ---------- */
+function hmac512(secret,msg){
+var enc=new TextEncoder();
+return crypto.subtle.importKey('raw',enc.encode(secret),{name:'HMAC',hash:'SHA-512'},false,['sign'])
+.then(function(k){return crypto.subtle.sign('HMAC',k,enc.encode(msg))})
+.then(function(b){return Array.from(new Uint8Array(b)).map(function(x){return ('0'+x.toString(16)).slice(-2)}).join('')})}
+function tapi(method){
+var key=ls('sx_key'),sec=ls('sx_sec');
+if(!key||!sec)return Promise.reject(new Error('Kunci API belum disimpan'));
+var p=new URLSearchParams();p.set('method',method);p.set('timestamp',String(Date.now()));p.set('recvWindow','5000');
+var body=p.toString();
+return hmac512(sec,body).then(function(sig){
+return fetch(API+'/tapi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Key':key,'Sign':sig},body:body}).then(function(r){return r.json()})})}
+function conn(){
+return tapi('getInfo').then(function(j){
+if(j&&Number(j.success)===1&&j.return){M.bal=j.return.balance||{};M.balAt=new Date();return M.bal}
+throw new Error(String(j&&(j.error||j.error_code)||'Respons tidak dikenali'))})}
+function balList(){
+var b=M.bal||{};
+return Object.keys(b).filter(function(k){return Number(b[k])>0}).slice(0,6).map(function(k){return '<div class="row" style="font-size:13px"><span class="sub">'+k.toUpperCase()+'</span><b>'+(k==='idr'?'Rp '+idr(b[k]):Number(b[k]).toLocaleString('id-ID',{maximumFractionDigits:8}))+'</b></div>'}).join('')||'<div class="sub">Tidak ada saldo di atas 0.</div>'}
+
+/* ---------- Tampilan ---------- */
+function pairsRow(){return '<div class="scroll" style="margin:12px 0">'+PAIRS.map(function(p){return '<button class="pill'+(S.pair===p[0]?' on':'')+'" data-a="pair:'+p[0]+'">'+p[1]+'</button>'}).join('')+'</div>'}
+function status(){return M.ok?'<span class="chip" style="font-weight:600"><span class="up">●</span> LIVE · Indodax</span>':'<span class="chip" style="font-weight:600"><span class="wa">●</span> '+(M.err?'Offline':'Menghubungkan…')+'</span>'}
+
+function dash(){
+var t=M.tick,d=M.last>=M.prev?'up':'dn';
+return ''+
+'<div class="row"><div class="row" style="justify-content:flex-start"><div style="width:36px;height:36px;border-radius:10px;background:var(--up);display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0B0F14" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/></svg></div><div><div style="font-weight:700;font-size:18px">ScalpX</div><div class="sub">Dashboard</div></div></div>'+status()+'</div>'+
+pairsRow()+
+'<div class="card col" style="gap:6px"><div class="sub">'+pairName()+' · harga terakhir</div>'+
+(t?'<div class="big '+d+'">Rp '+idr(M.last)+'</div><div class="row sub"><span>Tertinggi 24j <b style="color:var(--tx)">'+idr(t.high)+'</b></span><span>Terendah 24j <b style="color:var(--tx)">'+idr(t.low)+'</b></span></div><div class="row sub"><span>Beli <b style="color:var(--tx)">'+idr(t.buy)+'</b></span><span>Jual <b style="color:var(--tx)">'+idr(t.sell)+'</b></span></div>':'<div class="big" style="color:var(--mu)">…</div>'+(M.err?'<div class="dn" style="font-size:12px">Gagal memuat harga: '+M.err+'</div>':''))+'</div>'+
+'<div class="card col" style="margin-top:12px"><div class="row"><b style="font-size:15px">Saldo akun Indodax</b><button class="pill" data-a="bal">Segarkan</button></div>'+
+(M.bal?balList()+'<div class="sub">Diperbarui '+M.balAt.toLocaleTimeString('id-ID')+'</div>':'<div class="sub">Belum terhubung. Masukkan kunci API di tab Akun.</div>')+'</div>'+
+'<div class="note" style="margin-top:12px">Mode <b>hanya pantau</b>: aplikasi membaca harga dan saldo. Belum ada pengiriman order dan belum ada bot otomatis.</div>'}
+
+function candleSvg(){
+var b=BUCKET[S.tf]*1000,map={},order=[];
+M.ticks.forEach(function(t){var k=Math.floor(t[0]/b),c=map[k];if(!c){c=map[k]={o:t[1],h:t[1],l:t[1],c:t[1]};order.push(k)}else{c.h=Math.max(c.h,t[1]);c.l=Math.min(c.l,t[1]);c.c=t[1]}});
+var cs=order.slice(-40).map(function(k){return map[k]});
+if(cs.length<3)return '<div class="sub" style="padding:70px 14px;text-align:center">Mengumpulkan data harga…</div>';
+var lo=Math.min.apply(null,cs.map(function(c){return c.l})),hi=Math.max.apply(null,cs.map(function(c){return c.h}));
+if(hi===lo)hi=lo+1;var pad=(hi-lo)*0.08;lo-=pad;hi+=pad;
+var y=function(v){return 200-((v-lo)/(hi-lo))*190};
+var step=Math.min(14,334/cs.length),bw=Math.max(2,step*0.65),g='';
+cs.forEach(function(c,i){var col=c.c>=c.o?'#35E0A1':'#FF8F70',x=8+i*step,t=y(Math.max(c.o,c.c)),bt=y(Math.min(c.o,c.c));
+g+='<line x1="'+(x+bw/2)+'" x2="'+(x+bw/2)+'" y1="'+y(c.h)+'" y2="'+y(c.l)+'" stroke="'+col+'" stroke-width="1.5"/><rect x="'+x+'" y="'+t+'" width="'+bw+'" height="'+Math.max(2,bt-t)+'" rx="1" fill="'+col+'"/>'});
+var ly=y(cs[cs.length-1].c);
+g+='<line x1="0" x2="350" y1="'+ly+'" y2="'+ly+'" stroke="#9AA8B8" stroke-dasharray="2 4" opacity=".8"/>';
+return '<svg viewBox="0 0 350 210" width="100%" role="img" aria-label="Grafik candlestick '+pairName()+'">'+g+'</svg>'}
+
+function live(){
+var d=M.depth,t=M.tick,up=M.last>=M.prev?'up':'dn';
+function lv(a,cls){return (a||[]).slice(0,4).map(function(r){return '<div class="row" style="font-size:12px"><b class="'+cls+'">'+idr(r[0])+'</b><span class="sub">'+Number(r[1]).toLocaleString('id-ID',{maximumFractionDigits:4})+'</span></div>'}).join('')}
+return ''+
+'<div class="row"><div><b style="font-size:18px">'+pairName()+'</b><div class="sub">Indodax · diperbarui tiap 3 detik</div></div><div style="text-align:right"><b style="font-size:20px" class="'+(t?up:'')+'">'+(t?'Rp '+idr(M.last):'…')+'</b></div></div>'+
+pairsRow()+
+'<div class="row" style="justify-content:flex-start;gap:8px;margin-bottom:12px">'+['5s','15s','1m','5m'].map(function(x){return '<button class="pill'+(S.tf===x?' on':'')+'" data-a="tf:'+x+'">'+x+'</button>'}).join('')+'<span class="sub" style="margin-left:auto">'+status()+'</span></div>'+
+'<div class="card" style="padding:8px 0 4px">'+candleSvg()+'</div>'+
+(M.err?'<div class="dn" style="font-size:12px;margin-top:8px">Gagal memuat harga: '+M.err+'</div>':'')+
+'<div class="row" style="align-items:stretch;margin-top:12px"><div class="card col" style="gap:4px;flex:1"><span class="sub">Bid (beli)</span>'+lv(d&&d.buy,'up')+'</div><div class="card col" style="gap:4px;flex:1"><span class="sub">Ask (jual)</span>'+lv(d&&d.sell,'dn')+'</div></div>'}
+
+function strat(){return ''+
+'<h1>Strategi</h1><div class="sub" style="margin-bottom:12px">Pratinjau. Belum menjalankan order.</div>'+
+'<div class="col">'+STRATS.map(function(s){var on=S.strat===s[0];return '<button class="strat'+(on?' on':'')+'" data-a="strat:'+s[0]+'"><span><b style="font-size:14px">'+s[1]+'</b><br><span class="sub">'+s[2]+'</span></span><span class="chip" style="font-weight:600;'+(on?'background:var(--up);color:#0B0F14':'')+'">'+s[3]+'</span></button>'}).join('')+'</div>'+
+'<div class="card col" style="margin-top:14px;gap:6px"><b style="font-size:15px">Parameter</b>'+
+'<div class="row" style="font-size:13px"><label for="tp">Take profit</label><b class="up" data-bind="tp"></b></div><input id="tp" type="range" min="5" max="50" value="'+S.tp+'" data-r="tp">'+
+'<div class="row" style="font-size:13px"><label for="sl">Stop loss</label><b class="dn" data-bind="sl"></b></div><input id="sl" type="range" min="5" max="50" value="'+S.sl+'" data-r="sl">'+
+'<div class="row sub"><span>Rasio reward : risk</span><b style="color:var(--tx)" data-bind="ratio"></b></div></div>'}
+
+function hist(){
+var rows=TRADES.filter(function(t){return S.filter==='all'||(S.filter==='win'?t[5]>0:t[5]<0)});
+var sum=rows.reduce(function(a,t){return a+t[5]},0);
+return '<h1>Riwayat</h1><div class="sub" style="margin-bottom:12px">Contoh tampilan. Belum ada trade nyata.</div>'+
+'<div class="row" style="justify-content:flex-start;gap:8px">'+[['all','Semua'],['win','Profit'],['loss','Loss']].map(function(f){return '<button class="pill'+(S.filter===f[0]?' on':'')+'" data-a="filter:'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div>'+
+'<div class="card row" style="margin:12px 0"><div><div class="sub">Ditampilkan</div><b style="font-size:18px">'+rows.length+' trade</b></div><div style="text-align:right"><div class="sub">Total PnL (demo)</div><b style="font-size:18px" class="'+(sum>=0?'up':'dn')+'">'+money(sum)+'</b></div></div>'+
+'<div class="col">'+rows.map(function(t){return '<div class="card row"><div><b>'+t[0]+'</b><span class="tag '+(t[1]==='LONG'?'l':'s')+'">'+t[1]+'</span><div class="sub">'+t[2]+' → '+t[3]+' · '+t[4]+'</div></div><b class="'+(t[5]>=0?'up':'dn')+'">'+money(t[5])+'</b></div>'}).join('')+'</div>'}
+
+function risk(){
+var k=ls('sx_key'),has=!!(k&&ls('sx_sec'));
+return '<h1>Akun &amp; Risiko</h1><div class="sub" style="margin-bottom:12px">Hubungkan akun Indodax Anda</div>'+
+'<div class="card col"><div class="row"><b style="font-size:15px">Kunci API Indodax</b><span class="chip">'+(has?'Tersimpan · '+k.slice(0,4)+'••••':'Belum ada')+'</span></div>'+
+'<label class="sub" for="ak">API Key</label><input id="ak" class="inp" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Tempel API Key">'+
+'<label class="sub" for="as">Secret Key</label><input id="as" class="inp" type="password" autocomplete="off" placeholder="Tempel Secret Key">'+
+'<div class="row"><button class="btn" data-a="save" style="flex:1;background:var(--up);color:#0B0F14">Simpan</button><button class="btn" data-a="test" style="flex:1;background:var(--s2);border:1px solid var(--bd)">Uji koneksi</button></div>'+
+'<div id="exres" class="sub" role="status" style="min-height:18px"></div>'+
+(has?'<button class="pill" data-a="clear" style="color:var(--dn)">Hapus kunci dari perangkat</button>':'')+'</div>'+
+'<div class="note" style="margin-top:12px"><b style="color:var(--tx)">Keamanan:</b> buat kunci di pengaturan API Indodax dengan izin <b>Info saja</b> dulu. Jangan aktifkan izin penarikan dana (withdraw). Kunci disimpan hanya di HP ini dan tidak dikirim ke mana pun selain ke Indodax.</div>'+
+'<div class="card col" style="margin-top:12px;gap:6px"><b style="font-size:15px">Batas risiko <span class="sub">(aktif saat bot order ditambahkan)</span></b>'+
+'<div class="row" style="font-size:13px"><label for="dl">Batas rugi harian</label><b class="dn" data-bind="dl"></b></div><input id="dl" type="range" min="1" max="10" value="'+S.dl+'" data-r="dl">'+
+'<div class="row" style="font-size:13px"><label for="sz">Ukuran per trade</label><b data-bind="sz"></b></div><input id="sz" type="range" min="1" max="20" value="'+S.sz+'" data-r="sz">'+
+'<div class="row" style="font-size:13px"><label for="mp">Maks. posisi terbuka</label><b data-bind="mp"></b></div><input id="mp" type="range" min="1" max="8" value="'+S.mp+'" data-r="mp"></div>'+
+'<div class="sub" style="margin-top:10px;line-height:16px">Trading kripto berisiko tinggi. Hasil backtest dan paper trading tidak menjamin hasil di akun live.</div>'}
+
+function binds(){
+var m={tp:'+'+pct(S.tp),sl:'−'+pct(S.sl),ratio:'1 : '+(S.tp/S.sl).toFixed(1).replace('.',','),dl:'−'+S.dl+'% saldo',sz:S.sz+'% saldo',mp:String(S.mp)};
+document.querySelectorAll('[data-bind]').forEach(function(e){e.textContent=m[e.getAttribute('data-bind')]})}
+function render(){
+var v=$('#view');
+v.innerHTML={dash:dash,live:live,strat:strat,hist:hist,risk:risk}[S.tab]();
+$('#nav').innerHTML=TABS.map(function(t){return '<button class="'+(S.tab===t[0]?'on':'')+'" data-a="tab:'+t[0]+'">'+t[2]+t[1]+'</button>'}).join('');
+binds()}
+function refresh(){
+if(S.tab!=='dash'&&S.tab!=='live')return;
+var v=$('#view'),y=v.scrollTop;render();v.scrollTop=y}
+function res(msg,cls){var e=$('#exres');if(e){e.textContent=msg;e.className='sub '+(cls||'')}}
+
+document.addEventListener('click',function(e){
+var b=e.target.closest('[data-a]');if(!b)return;
+var p=b.getAttribute('data-a').split(':'),a=p[0],v=p[1];
+if(a==='save'){
+var k=$('#ak').value.trim(),s=$('#as').value.trim();
+if(!k||!s){res('Isi API Key dan Secret Key dulu.','dn');return}
+ls('sx_key',k);ls('sx_sec',s);render();res('Tersimpan di perangkat ini.','up');return}
+if(a==='test'){
+res('Menghubungi Indodax…');
+conn().then(function(){res('Terhubung. Saldo berhasil dibaca (lihat Dashboard).','up')}).catch(function(x){res('Gagal: '+(x&&x.message||x)+'. Cek kunci, izin Info, dan jam HP.','dn')});return}
+if(a==='clear'){ls('sx_key',null);ls('sx_sec',null);M.bal=null;render();return}
+if(a==='bal'){
+conn().then(function(){refresh()}).catch(function(x){M.err='Saldo: '+(x&&x.message||x);refresh()});return}
+if(a==='pair'){setPair(v);return}
+if(a==='tab'){S.tab=v;$('#view').scrollTop=0}
+else if(a==='tf')S.tf=v;
+else if(a==='strat')S.strat=v;
+else if(a==='filter')S.filter=v;
+render()});
+document.addEventListener('input',function(e){
+var k=e.target.getAttribute('data-r');if(!k)return;
+S[k]=Number(e.target.value);binds()});
+render();seed();poll();setInterval(poll,3000);
+</script>
+</body>
+</html>
